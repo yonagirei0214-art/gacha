@@ -1,0 +1,1028 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>🎰 ガチャ管理 - ライバーコントロール</title>
+<link href="https://fonts.googleapis.com/css2?family=Zen+Dots&family=Noto+Sans+JP:wght@400;700;900&display=swap" rel="stylesheet">
+<script src="https://unpkg.com/peerjs@1.5.4/dist/peerjs.min.js"></script>
+<style>
+:root{
+  --bg:#0a001a;--panel:rgba(20,0,45,0.85);--border:#4a0070;--border-glow:#8800ee;
+  --gold:#FFD700;--pink:#FF3AFF;--cyan:#00E5FF;--green:#00FF88;--red:#FF4466;
+  --text:#DDD0FF;--text-dim:#8070A0;
+}
+*{margin:0;padding:0;box-sizing:border-box;}
+body{background:var(--bg);color:var(--text);font-family:'Noto Sans JP',sans-serif;min-height:100vh;
+  background-image:radial-gradient(ellipse at 15% 50%,rgba(80,0,120,0.35) 0%,transparent 55%),
+  radial-gradient(ellipse at 85% 20%,rgba(0,80,180,0.2) 0%,transparent 50%);}
+header{display:flex;align-items:center;justify-content:space-between;padding:14px 20px;
+  background:rgba(8,0,20,0.9);border-bottom:1px solid var(--border);position:sticky;top:0;z-index:100;backdrop-filter:blur(10px);}
+header h1{font-family:'Zen Dots',monospace;font-size:18px;
+  background:linear-gradient(90deg,var(--gold),var(--pink),var(--cyan));
+  -webkit-background-clip:text;-webkit-text-fill-color:transparent;background-clip:text;}
+.room-badge{display:flex;align-items:center;gap:8px;padding:6px 14px;border-radius:20px;
+  background:var(--panel);border:1px solid var(--border);font-size:12px;font-family:'Zen Dots',monospace;}
+.dot{width:8px;height:8px;border-radius:50%;background:#444;transition:background 0.3s;}
+.room-badge.online .dot{background:var(--green);box-shadow:0 0 8px var(--green);animation:blink 2s infinite;}
+.room-badge.reconnecting .dot{background:var(--gold);box-shadow:0 0 8px var(--gold);animation:blink 0.6s infinite;}
+.room-badge.reconnecting{border-color:var(--gold);}
+@keyframes blink{0%,100%{opacity:1}50%{opacity:0.4}}
+.app{display:grid;grid-template-columns:320px 1fr;height:calc(100vh - 53px);}
+.sidebar{border-right:1px solid var(--border);overflow-y:auto;padding:14px;display:flex;flex-direction:column;gap:12px;min-height:0;}
+.main{overflow-y:auto;padding:14px;min-height:0;}
+.card{background:var(--panel);border:1px solid var(--border);border-radius:12px;padding:14px;margin-bottom:12px;}
+.card-title{font-family:'Zen Dots',monospace;font-size:11px;color:var(--cyan);letter-spacing:0.1em;text-transform:uppercase;margin-bottom:12px;}
+input[type=text],input[type=number],input[type=color],textarea,select{
+  width:100%;padding:8px 10px;background:rgba(0,0,0,0.5);border:1px solid var(--border);
+  border-radius:8px;color:var(--text);font-size:13px;font-family:'Noto Sans JP',sans-serif;outline:none;transition:border-color 0.2s;}
+input:focus,textarea:focus{border-color:var(--cyan);box-shadow:0 0 8px rgba(0,229,255,0.25);}
+input[type=color]{padding:3px 6px;height:36px;cursor:pointer;}
+textarea{resize:none;min-height:56px;line-height:1.5;}
+label{display:block;font-size:11px;color:var(--text-dim);margin-bottom:4px;}
+.form-row{display:grid;grid-template-columns:1fr 1fr;gap:8px;}
+.form-row3{display:grid;grid-template-columns:1fr 60px 80px;gap:6px;}
+.fg{margin-bottom:8px;}
+.btn{padding:8px 16px;border:none;border-radius:8px;font-family:'Zen Dots',monospace;font-size:11px;
+  cursor:pointer;transition:all 0.2s;letter-spacing:0.05em;white-space:nowrap;}
+.btn-primary{background:linear-gradient(135deg,#7000ff,#0088ff);color:#fff;}
+.btn-primary:hover{transform:translateY(-1px);box-shadow:0 4px 15px rgba(112,0,255,0.5);}
+.btn-gold{background:linear-gradient(135deg,var(--gold),#FF8C00);color:#1a0000;}
+.btn-gold:hover{transform:translateY(-1px);box-shadow:0 4px 15px rgba(255,215,0,0.4);}
+.btn-danger{background:rgba(255,50,80,0.15);color:var(--red);border:1px solid rgba(255,50,80,0.3);padding:4px 8px;font-size:10px;}
+.toggle-track{width:38px;height:20px;background:rgba(255,255,255,0.1);border:1px solid var(--border);border-radius:10px;position:relative;transition:background 0.2s;}
+.toggle-track.on{background:rgba(0,229,255,0.25);border-color:var(--cyan);}
+.toggle-thumb{width:14px;height:14px;background:#888;border-radius:50%;position:absolute;top:2px;left:2px;transition:all 0.2s;}
+.toggle-track.on .toggle-thumb{left:20px;background:var(--cyan);}
+.error-note{font-size:11px;color:var(--red);background:rgba(255,50,80,0.1);border:1px solid rgba(255,50,80,0.25);border-radius:8px;padding:8px 10px;margin-bottom:8px;}
+.btn-danger:hover{background:rgba(255,50,80,0.35);}
+.btn-sm{padding:4px 10px;font-size:10px;}
+.btn-block{width:100%;padding:10px;margin-top:8px;}
+.btn-ghost{background:rgba(255,255,255,0.05);border:1px solid rgba(255,255,255,0.12);color:var(--text-dim);font-size:10px;}
+.btn-ghost:hover{background:rgba(255,255,255,0.1);color:var(--text);}
+.icon-btn{background:none;border:none;cursor:pointer;color:var(--text-dim);font-size:15px;padding:2px 6px;}
+.icon-btn:hover{color:var(--text);}
+.flex{display:flex;}.gap-8{gap:8px;}.gap-4{gap:4px;}.mt-8{margin-top:8px;}.mt-4{margin-top:4px;}
+.empty{text-align:center;padding:20px;color:var(--text-dim);font-size:12px;}
+.tab-nav{display:flex;gap:3px;margin-bottom:14px;background:rgba(0,0,0,0.4);padding:4px;border-radius:10px;}
+.tab-btn{flex:1;padding:8px;background:none;border:none;color:var(--text-dim);font-size:12px;
+  cursor:pointer;border-radius:7px;transition:all 0.2s;font-family:'Noto Sans JP',sans-serif;}
+.tab-btn.active{background:rgba(112,0,255,0.4);color:#fff;}
+.tab-pane{display:none;}.tab-pane.active{display:block;}
+.stat-grid{display:grid;grid-template-columns:repeat(4,1fr);gap:8px;margin-bottom:14px;}
+.stat-item{background:var(--panel);border:1px solid var(--border);border-radius:10px;padding:10px;text-align:center;}
+.stat-val{font-family:'Zen Dots',monospace;font-size:20px;color:var(--cyan);}
+.stat-lbl{font-size:10px;color:var(--text-dim);margin-top:2px;}
+.room-id-display{font-family:'Zen Dots',monospace;font-size:22px;letter-spacing:0.15em;
+  text-align:center;padding:14px;background:rgba(0,0,0,0.4);border-radius:10px;
+  border:1px solid var(--border-glow);color:var(--gold);text-shadow:0 0 20px rgba(255,215,0,0.4);}
+.tbl{width:100%;border-collapse:collapse;}
+#listenerTableWrap{overflow-x:auto;}
+.tbl th{text-align:left;font-family:'Zen Dots',monospace;font-size:10px;color:var(--cyan);
+  letter-spacing:0.08em;padding:6px 8px;border-bottom:1px solid var(--border);}
+.tbl td{padding:8px;font-size:12px;border-bottom:1px solid rgba(74,0,112,0.3);vertical-align:middle;}
+.tbl tr:hover td{background:rgba(112,0,255,0.1);}
+.spins-badge{display:inline-block;background:rgba(0,229,255,0.12);color:var(--cyan);
+  border:1px solid rgba(0,229,255,0.3);border-radius:10px;padding:2px 10px;font-family:'Zen Dots',monospace;font-size:11px;}
+.status-on{color:var(--green);font-size:11px;}
+.status-off{color:var(--text-dim);font-size:11px;}
+.log-item{display:flex;align-items:center;gap:8px;padding:8px 10px;
+  background:rgba(0,0,0,0.3);border-radius:8px;margin-bottom:5px;border-left:3px solid;animation:slideIn 0.3s ease;}
+@keyframes slideIn{from{opacity:0;transform:translateX(-8px)}to{opacity:1;transform:translateX(0)}}
+.log-time{font-family:'Zen Dots',monospace;font-size:10px;color:var(--text-dim);white-space:nowrap;}
+.log-prize-name{font-weight:bold;}
+.file-wrap{position:relative;}
+.file-wrap input[type=file]{opacity:0;position:absolute;width:100%;height:100%;cursor:pointer;top:0;left:0;}
+.file-display{padding:7px 10px;background:rgba(0,0,0,0.4);border:1px dashed var(--border);
+  border-radius:8px;color:var(--text-dim);font-size:12px;cursor:pointer;min-height:34px;display:flex;align-items:center;}
+.file-display.has-file{border-color:var(--cyan);color:var(--cyan);}
+.rarity-block{background:rgba(0,0,0,0.3);border:1px solid var(--border);border-radius:10px;margin-bottom:8px;overflow:hidden;}
+.rarity-header{display:flex;align-items:center;gap:8px;padding:10px 12px;cursor:pointer;user-select:none;transition:background 0.2s;}
+.rarity-header:hover{background:rgba(255,255,255,0.04);}
+.rarity-dot{width:12px;height:12px;border-radius:50%;flex-shrink:0;}
+.rarity-name{font-family:'Zen Dots',monospace;font-size:13px;flex:1;}
+.rarity-rate-badge{font-family:'Zen Dots',monospace;font-size:11px;color:var(--gold);}
+.rarity-count{font-size:11px;color:var(--text-dim);}
+.rarity-body{padding:12px;border-top:1px solid rgba(74,0,112,0.4);display:none;}
+.rarity-body.open{display:block;}
+.prize-entry{display:flex;align-items:center;gap:6px;padding:6px 8px;
+  background:rgba(0,0,0,0.25);border-radius:6px;margin-bottom:4px;font-size:12px;}
+.prize-entry-name{flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;}
+.prize-tag{font-size:10px;padding:2px 6px;border-radius:4px;white-space:nowrap;}
+.tag-file{background:rgba(0,229,255,0.15);color:var(--cyan);border:1px solid rgba(0,229,255,0.3);}
+.tag-text{background:rgba(255,215,0,0.12);color:var(--gold);border:1px solid rgba(255,215,0,0.3);}
+.add-prize-form{background:rgba(0,0,0,0.2);border:1px dashed rgba(74,0,112,0.5);border-radius:8px;padding:10px;margin-top:8px;}
+.add-prize-title{font-size:11px;color:var(--text-dim);margin-bottom:8px;}
+.rate-meter{padding:8px;background:rgba(0,0,0,0.4);border-radius:8px;margin-top:8px;}
+.rate-bar{height:6px;background:rgba(255,255,255,0.1);border-radius:3px;overflow:hidden;margin-top:6px;}
+.rate-fill{height:100%;border-radius:3px;transition:width 0.3s;}
+.rate-label{display:flex;justify-content:space-between;font-size:11px;color:var(--text-dim);}
+.over{color:var(--red)!important;}
+::-webkit-scrollbar{width:5px;}::-webkit-scrollbar-track{background:transparent;}
+::-webkit-scrollbar-thumb{background:var(--border);border-radius:3px;}
+
+/* ===== MOBILE ===== */
+.mob-nav{display:none;position:fixed;bottom:0;left:0;right:0;
+  background:rgba(6,0,15,0.97);border-top:1px solid var(--border);
+  backdrop-filter:blur(12px);z-index:200;padding:0 0 env(safe-area-inset-bottom,0);}
+.mob-nav-inner{display:flex;}
+.mob-btn{flex:1;display:flex;flex-direction:column;align-items:center;justify-content:center;
+  gap:3px;padding:10px 4px;background:none;border:none;color:var(--text-dim);
+  font-size:9px;font-family:'Noto Sans JP',sans-serif;cursor:pointer;
+  transition:color 0.2s;-webkit-tap-highlight-color:transparent;line-height:1.2;}
+.mob-btn .mob-icon{font-size:20px;line-height:1;}
+.mob-btn.active{color:var(--cyan);}
+.mob-btn.active .mob-icon{filter:drop-shadow(0 0 4px var(--cyan));}
+
+@media(max-width:767px){
+  body{overflow:hidden;}
+  header{padding:10px 14px;}
+  header h1{font-size:15px;}
+  .room-badge{font-size:10px;padding:5px 10px;}
+  .app{display:block;height:calc(100dvh - 53px - 60px);overflow:hidden;}
+  .sidebar{display:none;height:100%;overflow-y:auto;padding:12px;border-right:none;flex-direction:column;gap:10px;}
+  .sidebar.mob-active{display:flex;}
+  .main{display:none;height:100%;overflow-y:auto;padding:12px;}
+  .main.mob-active{display:block;}
+  .stat-grid{grid-template-columns:1fr 1fr;}
+  .tab-nav{display:none;}
+  .tab-pane.active{display:block;}
+  .form-row3{grid-template-columns:1fr;gap:4px;}
+  .mob-nav{display:block;}
+}
+@media(min-width:768px){
+  .sidebar{display:flex!important;}
+  .main{display:block!important;}
+  .mob-nav{display:none!important;}
+}
+</style>
+</head>
+<body>
+<header>
+  <h1>🎰 GACHA CONTROL</h1>
+  <div class="room-badge" id="roomBadge"><div class="dot"></div><span id="roomBadgeText">オフライン</span></div>
+</header>
+
+<nav class="mob-nav">
+  <div class="mob-nav-inner">
+    <button class="mob-btn active" id="mobt-settings" onclick="switchMobTab('settings')"><span class="mob-icon">⚙️</span>設定</button>
+    <button class="mob-btn" id="mobt-room" onclick="switchMobTab('room')"><span class="mob-icon">📡</span>ルーム</button>
+    <button class="mob-btn" id="mobt-manage" onclick="switchMobTab('manage')"><span class="mob-icon">👥</span>リスナー</button>
+    <button class="mob-btn" id="mobt-log" onclick="switchMobTab('log')"><span class="mob-icon">📊</span>ログ</button>
+  </div>
+</nav>
+
+<div class="app">
+  <div class="sidebar">
+    <div class="card">
+      <div class="card-title">💎 ガチャ設定</div>
+      <div class="fg">
+        <label>1回あたりのコスト (Pt)</label>
+        <input type="number" id="costPerSpin" value="100" min="1" style="font-family:'Zen Dots',monospace;color:var(--gold);text-align:center;font-size:18px;">
+      </div>
+      <div class="fg" style="margin-bottom:0;">
+        <label>🎁 ボーナス（任意・空欄で無効）</label>
+        <div style="display:flex;align-items:center;gap:6px;flex-wrap:wrap;font-size:12px;color:var(--text-dim);">
+          <input type="number" id="bonusEvery" placeholder="例: 10" min="1" style="width:64px;text-align:center;padding:7px 4px;">
+          <span>回ごとに</span>
+          <input type="number" id="bonusFree" placeholder="例: 1" min="1" style="width:64px;text-align:center;padding:7px 4px;">
+          <span>回無料</span>
+        </div>
+        <p id="bonusError" style="font-size:10px;color:var(--red);margin-top:4px;display:none;">「無料回数」は「○回ごと」より小さい数にしてください</p>
+        <p style="font-size:10px;color:var(--text-dim);margin-top:2px;">※ 各リスナーの累計消化回数に対して適用されます</p>
+      </div>
+      <div style="display:flex;align-items:center;justify-content:space-between;margin-top:10px;padding-top:10px;border-top:1px solid var(--border);">
+        <span style="font-size:13px;color:var(--text-dim);">🔐 PIN認証</span>
+        <div style="display:flex;align-items:center;gap:8px;cursor:pointer;user-select:none;" onclick="togglePinAuth()">
+          <span id="pinToggleLabel" style="font-size:11px;color:var(--text-dim);">オフ</span>
+          <div class="toggle-track" id="pinToggleTrack"><div class="toggle-thumb"></div></div>
+        </div>
+      </div>
+    </div>
+
+    <div class="card">
+      <div class="card-title">🎨 レアリティ設定</div>
+      <div class="form-row3" style="margin-bottom:6px;">
+        <div class="fg" style="margin-bottom:0;"><label>名前</label><input type="text" id="rName" placeholder="例: SSR"></div>
+        <div class="fg" style="margin-bottom:0;"><label>色</label><input type="color" id="rColor" value="#ff0080"></div>
+        <div class="fg" style="margin-bottom:0;"><label>排出率%</label><input type="number" id="rRate" placeholder="5" min="0.1" max="100" step="0.1"></div>
+      </div>
+      <button class="btn btn-primary btn-block" style="margin-top:4px;" onclick="addRarity()">＋ レアリティを追加</button>
+      <div class="rate-meter">
+        <div class="rate-label"><span>合計排出率</span><span id="totalRateText">0%</span></div>
+        <div class="rate-bar"><div class="rate-fill" id="rateFill" style="width:0%"></div></div>
+      </div>
+    </div>
+
+    <div class="card">
+      <div class="card-title">📋 レアリティ一覧</div>
+      <div id="rarityList"><div class="empty">レアリティがありません</div></div>
+    </div>
+
+    <div class="card">
+      <div class="card-title">🗃️ データ管理</div>
+      <p style="font-size:11px;color:var(--text-dim);margin-bottom:10px;">設定・景品ファイルはすべて自動保存されます。</p>
+      <button class="btn btn-danger btn-block" style="width:100%;padding:10px;font-size:11px;" onclick="resetAll()">🗑 すべてリセット</button>
+    </div>
+  </div>
+
+  <div class="main">
+    <div class="stat-grid">
+      <div class="stat-item"><div class="stat-val" id="statConn">0</div><div class="stat-lbl">接続中</div></div>
+      <div class="stat-item"><div class="stat-val" id="statReg">0</div><div class="stat-lbl">登録済み</div></div>
+      <div class="stat-item"><div class="stat-val" id="statR">0</div><div class="stat-lbl">レアリティ</div></div>
+      <div class="stat-item"><div class="stat-val" id="statWins">0</div><div class="stat-lbl">当選数</div></div>
+    </div>
+    <div class="tab-nav">
+      <button class="tab-btn active" data-tab="room" onclick="switchTab('room',this)">📡 ルーム</button>
+      <button class="tab-btn" data-tab="manage" onclick="switchTab('manage',this)">👥 リスナー管理</button>
+      <button class="tab-btn" data-tab="log" onclick="switchTab('log',this)">📊 ログ</button>
+    </div>
+
+    <div class="tab-pane active" id="tab-room">
+      <div class="card">
+        <div class="card-title">📡 ルーム管理</div>
+        <div id="roomCreateArea">
+          <p style="color:var(--text-dim);font-size:13px;margin-bottom:12px;">レアリティと景品を登録後、ルームを作成してURLをリスナーに共有してください。</p>
+          <p style="color:var(--cyan);font-size:11px;margin-bottom:12px;">📌 同じブラウザなら次回も同じルームIDが使われます。</p>
+          <button class="btn btn-gold btn-block" onclick="createRoom()">🎰 ルームを作成する</button>
+        </div>
+        <div id="roomInfoArea" style="display:none;">
+          <div class="room-id-display" id="roomIdDisplay">------</div>
+          <div style="margin-top:8px;font-size:11px;color:var(--text-dim);">リスナー共有URL（直接編集できます）</div>
+          <input type="text" id="guestUrlBox" style="margin-top:6px;font-size:11px;color:var(--cyan);background:rgba(0,0,0,0.4);border:1px solid var(--border);border-radius:8px;padding:10px;width:100%;" placeholder="-">
+          <p style="font-size:10px;color:var(--text-dim);margin-top:4px;">※ URLが違う場合は手動で修正してください</p>
+          <div class="flex gap-8 mt-8">
+            <button class="btn btn-primary" style="flex:1;" onclick="copyGuestUrl()">📋 URLをコピー</button>
+            <button class="btn btn-danger" style="flex:1;padding:8px;" onclick="closeRoom()">❌ 閉じる</button>
+          </div>
+          <button class="btn btn-ghost btn-block" onclick="resetRoomId()">🔄 ルームIDを変更する（URLが変わります）</button>
+        </div>
+      </div>
+    </div>
+
+    <div class="tab-pane" id="tab-manage">
+      <div class="card" style="margin-bottom:12px;">
+        <div class="card-title">➕ リスナーを追加 / Pt付与</div>
+        <div class="form-row">
+          <div class="fg"><label>リスナー名</label><input type="text" id="newListenerName" placeholder="例: ☆ゆいか☆"></div>
+          <div class="fg"><label>投げたPt数</label><input type="number" id="newListenerPt" placeholder="例: 1000" min="0"></div>
+        </div>
+        <p style="font-size:11px;color:var(--text-dim);margin-bottom:6px;" id="spinsPreview">　</p>
+        <button class="btn btn-primary btn-block" style="margin-top:0;" onclick="addListener()">追加 / 回数を付与</button>
+      </div>
+      <div class="card">
+        <div class="card-title flex" style="align-items:center;">
+          👥 リスナー一覧
+          <button class="btn btn-ghost btn-sm" style="margin-left:auto;" onclick="resetAllSpins()">🔄 全員の回数をリセット</button>
+        </div>
+        <div id="listenerTableWrap"><div class="empty">リスナーが登録されていません</div></div>
+      </div>
+    </div>
+
+    <div class="tab-pane" id="tab-log">
+      <div class="card">
+        <div class="card-title flex" style="align-items:center;flex-wrap:wrap;gap:6px;">
+          📊 当選ログ
+          <select id="logFilter" onchange="renderLog()" style="width:auto;max-width:130px;padding:4px 8px;margin-left:4px;font-size:11px;"></select>
+          <div class="flex gap-4" style="margin-left:auto;">
+            <button class="btn btn-ghost btn-sm" onclick="exportCSV()">📥 CSV</button>
+            <button class="btn btn-danger btn-sm" onclick="clearLog()">クリア</button>
+          </div>
+        </div>
+        <div id="winLog"><div class="empty">まだ当選者がいません</div></div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<script>
+const state={
+  rarities:[],costPerSpin:100,bonusEvery:null,bonusFree:null,pinEnabled:false,
+  peer:null,roomId:null,connections:{},listeners:{},log:[],winCount:0
+};
+let _reconnectTimer=null;
+let _roomCreated=false;
+
+/* ===== HTML ESCAPE ===== */
+function esc(s){return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');}
+
+/* ===== RARITY ===== */
+function addRarity(){
+  const name=document.getElementById('rName').value.trim();
+  const color=document.getElementById('rColor').value;
+  const rate=parseFloat(document.getElementById('rRate').value);
+  if(!name)return alert('レアリティ名を入力してください');
+  if(isNaN(rate)||rate<=0)return alert('排出率を入力してください');
+  const total=state.rarities.reduce((s,r)=>s+r.rate,0);
+  if(total+rate>100.01)return alert(`合計が100%を超えます（現在:${total.toFixed(1)}%）`);
+  state.rarities.push({id:Date.now(),name,color,rate,prizes:[]});
+  renderRarities();updateStats();saveState();
+  document.getElementById('rName').value='';
+  document.getElementById('rRate').value='';
+}
+
+async function removeRarity(id){
+  if(!confirm('このレアリティを削除しますか？景品もすべて削除されます。'))return;
+  const r=state.rarities.find(x=>x.id===id);
+  if(r){
+    for(const p of r.prizes){
+      if(p.file)await dbDeleteFile('f-'+p.id).catch(()=>{});
+    }
+  }
+  state.rarities=state.rarities.filter(r=>r.id!==id);
+  renderRarities();updateStats();saveState();
+}
+
+function toggleBody(id){
+  const el=document.getElementById('rb-'+id);
+  el.classList.toggle('open');
+}
+
+function renderRarities(){
+  const el=document.getElementById('rarityList');
+  const total=state.rarities.reduce((s,r)=>s+r.rate,0);
+  updateRateMeter(total);
+  if(!state.rarities.length){el.innerHTML='<div class="empty">レアリティがありません</div>';return;}
+  el.innerHTML=state.rarities.map(r=>`
+    <div class="rarity-block">
+      <div class="rarity-header" onclick="toggleBody(${r.id})">
+        <div class="rarity-dot" style="background:${r.color};box-shadow:0 0 6px ${r.color}80;"></div>
+        <span class="rarity-name">${esc(r.name)}</span>
+        <span class="rarity-rate-badge">${r.rate}%</span>
+        <span class="rarity-count">${r.prizes.length}種</span>
+        <button class="icon-btn" onclick="event.stopPropagation();removeRarity(${r.id})">🗑</button>
+      </div>
+      <div class="rarity-body" id="rb-${r.id}">
+        ${r.prizes.map(p=>`
+          <div class="prize-entry">
+            <span class="prize-entry-name">${esc(p.name)}</span>
+            ${p.text?`<span class="prize-tag tag-text">テキスト</span>`:''}
+            ${p.file?`<span class="prize-tag tag-file">📁 ${esc(p.file.name)}</span>`:''}
+            <button class="icon-btn" onclick="removePrize(${r.id},${p.id})">🗑</button>
+          </div>`).join('')}
+        ${!r.prizes.length?'<div style="font-size:11px;color:var(--text-dim);padding:4px 0 8px;">景品が未登録です</div>':''}
+        <div class="add-prize-form">
+          <div class="add-prize-title">＋ 景品を追加</div>
+          <div class="fg"><label>景品名</label><input type="text" id="pn-${r.id}" placeholder="例: イラストセット"></div>
+          <div class="fg"><label>メッセージ（任意）</label><textarea id="pt-${r.id}" placeholder="当選メッセージなど（なくてもOK）" rows="2"></textarea></div>
+          <div class="fg">
+            <label>ファイル（任意・ZIP / PNG / PDF など）</label>
+            <div class="file-wrap">
+              <input type="file" id="pf-${r.id}" onchange="updateFileLabel(this,'pfl-${r.id}')">
+              <div class="file-display" id="pfl-${r.id}">📁 クリックして選択（なくてもOK）</div>
+            </div>
+          </div>
+          <button class="btn btn-primary" style="width:100%;padding:8px;" onclick="addPrize(${r.id})">景品を追加</button>
+        </div>
+      </div>
+    </div>`).join('');
+}
+
+function updateFileLabel(input,labelId){
+  const el=document.getElementById(labelId);
+  if(input.files&&input.files[0]){el.textContent='✅ '+input.files[0].name;el.classList.add('has-file');}
+  else{el.textContent='📁 クリックして選択（なくてもOK）';el.classList.remove('has-file');}
+}
+
+async function stripExif(file){
+  // 画像ファイルのみCanvasで再エクスポートしてEXIF等のメタデータを消去
+  // PDF・ZIP等の非画像はそのまま返す
+  if(!file.type.startsWith('image/'))return file.arrayBuffer();
+  return new Promise((resolve,reject)=>{
+    const url=URL.createObjectURL(file);
+    const img=new Image();
+    img.onload=()=>{
+      const c=document.createElement('canvas');
+      c.width=img.naturalWidth;c.height=img.naturalHeight;
+      c.getContext('2d').drawImage(img,0,0);
+      URL.revokeObjectURL(url);
+      // PNG以外はJPEGで出力（サイズ節約 & EXIF除去）
+      const mime=file.type==='image/png'?'image/png':'image/jpeg';
+      c.toBlob(b=>{
+        if(!b){reject(new Error('Canvas export failed'));return;}
+        b.arrayBuffer().then(resolve).catch(reject);
+      },mime,0.92);
+    };
+    img.onerror=()=>{URL.revokeObjectURL(url);reject(new Error('Image load failed'));};
+    img.src=url;
+  });
+}
+
+async function addPrize(rid){
+  const r=state.rarities.find(x=>x.id===rid);if(!r)return;
+  const name=document.getElementById('pn-'+rid).value.trim();
+  const text=document.getElementById('pt-'+rid).value.trim();
+  const fi=document.getElementById('pf-'+rid);
+  if(!name)return alert('景品名を入力してください');
+  if(!text&&!fi.files[0])return alert('メッセージかファイルのどちらかは必要です');
+  const prizeId=Date.now();
+  let file=null;
+  if(fi.files[0]){
+    const fName=fi.files[0].name;
+    const fMime=fi.files[0].type||'application/octet-stream';
+    const ab=await stripExif(fi.files[0]);
+    await dbSaveFile('f-'+prizeId,ab,fName,fMime).catch(e=>console.warn('dbSave failed:',e));
+    file={name:fName,mimeType:fMime,arrayBuffer:ab};
+  }
+  r.prizes.push({id:prizeId,name,text,file});
+  renderRarities();updateStats();saveState();
+  setTimeout(()=>{const rb=document.getElementById('rb-'+rid);if(rb)rb.classList.add('open');},50);
+}
+
+async function removePrize(rid,pid){
+  const r=state.rarities.find(x=>x.id===rid);if(!r)return;
+  const prize=r.prizes.find(p=>p.id===pid);
+  if(prize?.file)await dbDeleteFile('f-'+pid).catch(()=>{});
+  r.prizes=r.prizes.filter(p=>p.id!==pid);
+  renderRarities();updateStats();saveState();
+  setTimeout(()=>{const rb=document.getElementById('rb-'+rid);if(rb)rb.classList.add('open');},50);
+}
+
+function updateRateMeter(total){
+  const fill=document.getElementById('rateFill');
+  const text=document.getElementById('totalRateText');
+  fill.style.width=Math.min(total,100)+'%';
+  text.textContent=total.toFixed(1)+'%';
+  text.className=total>100?'over':'';
+  fill.style.background=total>100?'linear-gradient(90deg,#ff4040,#ff0000)':
+    total>=99.9?'linear-gradient(90deg,var(--green),#00cc66)':
+    'linear-gradient(90deg,var(--cyan),var(--pink))';
+}
+
+/* ===== ROOM ===== */
+function genRoomId(){
+  const c='ABCDEFGHJKLMNPQRSTUVWXYZ23456789';
+  return 'GACHA-'+Array.from({length:6},()=>c[Math.floor(Math.random()*c.length)]).join('');
+}
+
+const ROOM_ID_KEY='gacha-room-id';
+
+function createRoom(){
+  const totalRate=state.rarities.reduce((s,r)=>s+r.rate,0);
+  if(!state.rarities.length)return alert('レアリティを追加してください');
+  if(Math.abs(totalRate-100)>0.5)return alert(`排出率の合計を100%にしてください（現在:${totalRate.toFixed(1)}%）`);
+  for(const r of state.rarities){if(!r.prizes.length)return alert(`「${r.name}」に景品が登録されていません`);}
+  state.costPerSpin=parseInt(document.getElementById('costPerSpin').value)||100;
+  state.roomId=localStorage.getItem(ROOM_ID_KEY)||genRoomId();
+  localStorage.setItem(ROOM_ID_KEY,state.roomId);
+  _roomCreated=false;
+  initPeer(state.roomId);
+}
+
+function resetRoomId(){
+  if(!confirm('ルームIDを変更しますか？\n変更すると既存のゲストURLは使えなくなります。'))return;
+  localStorage.removeItem(ROOM_ID_KEY);
+  clearTimeout(_reconnectTimer);
+  if(state.peer){state.peer.destroy();state.peer=null;}
+  state.connections={};state.roomId=null;_roomCreated=false;
+  document.getElementById('roomCreateArea').style.display='block';
+  document.getElementById('roomInfoArea').style.display='none';
+  document.getElementById('roomBadge').classList.remove('online','reconnecting');
+  document.getElementById('roomBadgeText').textContent='オフライン';
+  updateStats();renderListeners();
+  toast('新しいIDで作成できます');
+}
+
+function initPeer(roomId){
+  if(state.peer&&!state.peer.destroyed)state.peer.destroy();
+  state.peer=new Peer(roomId,{debug:0});
+  state.peer.on('open',id=>{
+    clearTimeout(_reconnectTimer);
+    if(!_roomCreated){showRoomInfo(id);toast('ルームを作成しました！');_roomCreated=true;}
+    else{setBadgeOnline(id);toast('サーバーに再接続しました');}
+  });
+  state.peer.on('connection',handleConn);
+  state.peer.on('disconnected',()=>{
+    setBadgeReconnecting();
+    clearTimeout(_reconnectTimer);
+    _reconnectTimer=setTimeout(()=>{
+      if(state.peer&&!state.peer.destroyed){
+        try{state.peer.reconnect();}catch(e){initPeer(roomId);}
+      }
+    },2500);
+  });
+  state.peer.on('error',err=>{
+    if(err.type==='unavailable-id'){
+      setBadgeReconnecting();
+      toast('⏳ ID確保中... 5秒後に再接続します');
+      clearTimeout(_reconnectTimer);
+      _reconnectTimer=setTimeout(()=>initPeer(roomId),5000);
+    }else if(['network','server-error','socket-error','socket-closed'].includes(err.type)){
+      setBadgeReconnecting();
+      clearTimeout(_reconnectTimer);
+      _reconnectTimer=setTimeout(()=>initPeer(roomId),3000);
+    }else{
+      console.warn('PeerJS error:',err.type,err.message);
+    }
+  });
+}
+
+function setBadgeOnline(id){
+  document.getElementById('roomBadge').classList.remove('reconnecting');
+  document.getElementById('roomBadge').classList.add('online');
+  document.getElementById('roomBadgeText').textContent=id;
+}
+function setBadgeReconnecting(){
+  document.getElementById('roomBadge').classList.remove('online');
+  document.getElementById('roomBadge').classList.add('reconnecting');
+  document.getElementById('roomBadgeText').textContent='再接続中...';
+}
+
+function showRoomInfo(id){
+  document.getElementById('roomCreateArea').style.display='none';
+  document.getElementById('roomInfoArea').style.display='block';
+  document.getElementById('roomIdDisplay').textContent=id;
+  const pathBase=location.pathname.replace(/[^/]+$/,'');
+  const base=location.protocol==='file:' ? './' : location.origin+pathBase;
+  document.getElementById('guestUrlBox').value=base+'gacha-guest.html?room='+id;
+  setBadgeOnline(id);
+}
+
+function copyGuestUrl(){
+  navigator.clipboard.writeText(document.getElementById('guestUrlBox').value)
+    .then(()=>toast('URLをコピーしました！'));
+}
+
+function closeRoom(){
+  if(!confirm('ルームを閉じますか？'))return;
+  clearTimeout(_reconnectTimer);
+  if(state.peer){state.peer.destroy();state.peer=null;}
+  state.connections={};state.roomId=null;_roomCreated=false;
+  document.getElementById('roomCreateArea').style.display='block';
+  document.getElementById('roomInfoArea').style.display='none';
+  document.getElementById('roomBadge').classList.remove('online','reconnecting');
+  document.getElementById('roomBadgeText').textContent='オフライン';
+  updateStats();renderListeners();
+}
+
+/* ===== PIN AUTH ===== */
+function genPin(){
+  // O/0, I/1/l など紛らわしい文字を除外した8桁英数字
+  const chars='ABCDEFGHJKMNPQRSTUVWXYZ23456789';
+  return Array.from({length:8},()=>chars[Math.floor(Math.random()*chars.length)]).join('');
+}
+
+function togglePinAuth(){
+  state.pinEnabled=!state.pinEnabled;
+  document.getElementById('pinToggleTrack').classList.toggle('on',state.pinEnabled);
+  document.getElementById('pinToggleLabel').textContent=state.pinEnabled?'オン':'オフ';
+  renderListeners();saveState();
+  // 接続中のゲストに設定変更を通知
+  Object.values(state.connections).forEach(cd=>{
+    cd.conn.send({type:'pin_setting',pinEnabled:state.pinEnabled});
+  });
+  toast(`PIN認証を${state.pinEnabled?'有効':'無効'}にしました`);
+}
+
+function copyPin(name){
+  const l=state.listeners[name];if(!l?.pin)return;
+  navigator.clipboard.writeText(l.pin).then(()=>toast(`${name} のPINをコピーしました`));
+}
+
+/* ===== CONNECTIONS ===== */
+function handleConn(conn){
+  conn.on('open',()=>{
+    conn.send({type:'pin_required',value:state.pinEnabled});
+  });
+  conn.on('data',data=>{
+    if(typeof data!=='object')return;
+    if(data.type==='identify')handleIdentify(conn,data.name,data.pin);
+    else if(data.type==='spin_request')handleSpin(conn);
+  });
+  conn.on('close',()=>{
+    const cd=state.connections[conn.peer];
+    if(cd&&state.listeners[cd.name])state.listeners[cd.name].peerId=null;
+    delete state.connections[conn.peer];
+    updateStats();renderListeners();
+  });
+  conn.on('error',e=>console.warn('conn error:',conn.peer,e));
+}
+
+function handleIdentify(conn,name,pin){
+  const l=state.listeners[name];
+  if(!l){conn.send({type:'error',message:'このユーザー名は登録されていません。ライバーに確認してください。'});return;}
+  if(state.pinEnabled){
+    if(!pin){conn.send({type:'error',message:'PINを入力してください。'});return;}
+    if(pin.toUpperCase()!==l.pin){conn.send({type:'error',message:'PINが違います。ライバーに確認してください。'});return;}
+  }
+  l.peerId=conn.peer;
+  state.connections[conn.peer]={conn,name};
+  const bonusActive=state.bonusEvery>0&&state.bonusFree>0&&state.bonusFree<state.bonusEvery;
+  conn.send({type:'welcome',name,remainingSpins:l.remainingSpins,costPerSpin:state.costPerSpin,
+    bonusEvery:bonusActive?state.bonusEvery:null,bonusFree:bonusActive?state.bonusFree:null});
+  updateStats();renderListeners();
+}
+
+function handleSpin(conn){
+  const cd=state.connections[conn.peer];if(!cd)return;
+  const l=state.listeners[cd.name];
+  if(!l||l.remainingSpins<=0){conn.send({type:'spin_denied',message:'残り回数がありません'});return;}
+  const result=rollGacha();
+  if(!result){conn.send({type:'spin_denied',message:'景品が登録されていません'});return;}
+  l.remainingSpins--;
+  l.spinsUsed=(l.spinsUsed||0)+1;
+  let bonusAwarded=0;
+  // DOM から直読み（input イベント未発火でも確実に最新値を使う）
+  const bEvery=parseInt(document.getElementById('bonusEvery').value)||null;
+  const bFree=parseInt(document.getElementById('bonusFree').value)||null;
+  if(bEvery>0&&bFree>0&&bFree<bEvery&&l.spinsUsed%bEvery===0){
+    bonusAwarded=bFree;
+    l.remainingSpins+=bonusAwarded;
+  }
+  conn.send({
+    type:'spin_result',
+    rarity:{name:result.rarity.name,color:result.rarity.color},
+    prize:{name:result.prize.name,text:result.prize.text,hasFile:!!(result.prize.file&&result.prize.file.arrayBuffer),
+      fileName:result.prize.file?.name||null,mimeType:result.prize.file?.mimeType||null},
+    remainingSpins:l.remainingSpins,
+    bonusAwarded
+  });
+  if(result.prize.file&&result.prize.file.arrayBuffer)
+    sendChunks(conn,result.prize.file.arrayBuffer,result.prize.file.name,result.prize.file.mimeType);
+  addLog(cd.name,result);updateStats();renderListeners();saveState();
+}
+
+function rollGacha(){
+  if(!state.rarities.length)return null;
+  const r=Math.random()*100;let c=0;let sel=null;
+  for(const rarity of state.rarities){c+=rarity.rate;if(r<=c){sel=rarity;break;}}
+  if(!sel)sel=state.rarities[state.rarities.length-1];
+  if(!sel.prizes.length)return null;
+  const prize=sel.prizes[Math.floor(Math.random()*sel.prizes.length)];
+  return{rarity:sel,prize};
+}
+
+/* ===== FILE TRANSFER ===== */
+function sendChunks(conn,ab,fileName,mimeType){
+  const bytes=new Uint8Array(ab);
+  let bin='';const BLOCK=8192;
+  for(let i=0;i<bytes.byteLength;i+=BLOCK)bin+=String.fromCharCode(...bytes.subarray(i,i+BLOCK));
+  const b64=btoa(bin);
+  const CS=49152;const total=Math.ceil(b64.length/CS);
+  conn.send({type:'file_start',fileName,mimeType,totalChunks:total,totalSize:ab.byteLength});
+  let idx=0;
+  function next(){
+    if(idx>=total){conn.send({type:'file_end',fileName});return;}
+    conn.send({type:'file_chunk',i:idx,d:b64.slice(idx*CS,(idx+1)*CS)});
+    idx++;setTimeout(next,8);
+  }
+  next();
+}
+
+/* ===== LISTENERS ===== */
+function updateSpinsPreview(){
+  const pt=parseInt(document.getElementById('newListenerPt').value)||0;
+  const cost=parseInt(document.getElementById('costPerSpin').value)||100;
+  if(pt<=0){document.getElementById('spinsPreview').textContent='　';return;}
+  const spins=Math.floor(pt/cost);
+  let text=`→ ${spins}回ガチャを引けます`;
+  const every=parseInt(document.getElementById('bonusEvery').value)||null;
+  const free=parseInt(document.getElementById('bonusFree').value)||null;
+  if(every>0&&free>0&&free<every)text+=`（${every}回ごとに${free}回無料あり）`;
+  document.getElementById('spinsPreview').textContent=text;
+}
+document.getElementById('newListenerPt').addEventListener('input',updateSpinsPreview);
+
+function addListener(){
+  const name=document.getElementById('newListenerName').value.trim();
+  const pt=parseInt(document.getElementById('newListenerPt').value);
+  const cost=parseInt(document.getElementById('costPerSpin').value)||100;
+  if(!name)return alert('リスナー名を入力してください');
+  if(isNaN(pt)||pt<0)return alert('Pt数を入力してください');
+  const spins=Math.floor(pt/cost);
+  if(state.listeners[name]){
+    state.listeners[name].remainingSpins+=spins;
+    toast(`${name} に ${spins}回追加しました`);
+    const l=state.listeners[name];
+    if(l.peerId&&state.connections[l.peerId])
+      state.connections[l.peerId].conn.send({type:'spins_update',remainingSpins:l.remainingSpins});
+  }else{
+    const pin=state.pinEnabled?genPin():null;
+    state.listeners[name]={remainingSpins:spins,peerId:null,spinsUsed:0,pin};
+    toast(`${name} を登録しました（${spins}回）`);
+  }
+  document.getElementById('newListenerName').value='';
+  document.getElementById('newListenerPt').value='';
+  document.getElementById('spinsPreview').textContent='　';
+  renderListeners();updateStats();saveState();
+}
+
+function removeListener(name){
+  if(!confirm(`${name} を削除しますか？`))return;
+  const l=state.listeners[name];
+  if(l&&l.peerId&&state.connections[l.peerId])state.connections[l.peerId].conn.close();
+  delete state.listeners[name];renderListeners();updateStats();saveState();
+}
+
+function resetAllSpins(){
+  if(!confirm('全リスナーの残り回数を0にリセットしますか？'))return;
+  Object.keys(state.listeners).forEach(name=>{
+    state.listeners[name].remainingSpins=0;
+    const l=state.listeners[name];
+    if(l.peerId&&state.connections[l.peerId])
+      state.connections[l.peerId].conn.send({type:'spins_update',remainingSpins:0});
+  });
+  renderListeners();saveState();toast('全リスナーの回数をリセットしました');
+}
+
+function renderListeners(){
+  const wrap=document.getElementById('listenerTableWrap');
+  const names=Object.keys(state.listeners);
+  if(!names.length){wrap.innerHTML='<div class="empty">リスナーが登録されていません</div>';return;}
+  const bonusOn=state.bonusEvery>0&&state.bonusFree>0&&state.bonusFree<state.bonusEvery;
+  const showPin=state.pinEnabled;
+  // PINなしリスナーが残っていたら警告
+  const noPinCount=showPin?names.filter(n=>!state.listeners[n].pin).length:0;
+  const warning=noPinCount?`<div class="error-note">⚠ PIN未設定のリスナーが${noPinCount}名います。削除して再登録してください。</div>`:'';
+  wrap.innerHTML=warning+`<table class="tbl"><thead><tr><th>リスナー名</th><th>残り回数</th>${bonusOn?'<th>次ボーナス</th>':''}${showPin?'<th>PIN</th>':''}<th>状態</th><th></th></tr></thead><tbody>
+    ${names.map(n=>{const l=state.listeners[n];const on=l.peerId&&state.connections[l.peerId];
+      const toNext=bonusOn?(state.bonusEvery-((l.spinsUsed||0)%state.bonusEvery)):null;
+      const safeN=esc(n).replace(/'/g,"\\'");
+      const pinCell=showPin?`<td><div class="flex gap-4" style="align-items:center;">
+        <span style="font-family:'JetBrains Mono',monospace;font-size:11px;letter-spacing:0.1em;color:${l.pin?'var(--cyan)':'var(--red)'};">${l.pin||'未設定'}</span>
+        ${l.pin?`<button class="btn btn-ghost btn-sm" onclick="copyPin('${safeN}')">📋</button>`:''}
+      </div></td>`:'';
+      return`<tr><td>${esc(n)}</td><td><span class="spins-badge">${l.remainingSpins}回</span></td>
+        ${bonusOn?`<td><span style="font-size:11px;color:var(--gold);">あと${toNext}回</span></td>`:''}
+        ${pinCell}
+        <td>${on?'<span class="status-on">🟢 接続中</span>':'<span class="status-off">⚪ 未接続</span>'}</td>
+        <td><div class="flex gap-4">
+          <button class="btn btn-ghost btn-sm" onclick="resetListenerSpins('${safeN}')">🔄 回数</button>
+          <button class="btn btn-danger btn-sm" onclick="removeListener('${safeN}')">削除</button>
+        </div></td></tr>`;
+    }).join('')}</tbody></table>`;
+}
+
+function resetListenerSpins(name){
+  const l=state.listeners[name];if(!l)return;
+  if(!confirm(`${name} の残り回数を0にリセットしますか？`))return;
+  l.remainingSpins=0;
+  if(l.peerId&&state.connections[l.peerId])
+    state.connections[l.peerId].conn.send({type:'spins_update',remainingSpins:0});
+  renderListeners();saveState();toast(`${name} の回数をリセットしました`);
+}
+
+/* ===== LOG ===== */
+function addLog(name,result){
+  state.winCount++;
+  const t=new Date().toLocaleTimeString('ja-JP',{hour:'2-digit',minute:'2-digit',second:'2-digit'});
+  state.log.unshift({name,rarity:result.rarity,prize:result.prize,t});
+  renderLog();updateStats();
+}
+
+function renderLog(){
+  const el=document.getElementById('winLog');
+  const filterEl=document.getElementById('logFilter');
+  const prevVal=filterEl.value;
+  const namesInLog=[...new Set(state.log.map(e=>e.name))];
+  const allNames=[...new Set([...Object.keys(state.listeners),...namesInLog])].sort((a,b)=>a.localeCompare(b,'ja'));
+  filterEl.innerHTML=`<option value="">👥 全員 (${state.log.length}件)</option>`+
+    allNames.map(n=>{
+      const c=state.log.filter(e=>e.name===n).length;
+      return `<option value="${esc(n)}">${esc(n)}（${c}件）</option>`;
+    }).join('');
+  if([...filterEl.options].some(o=>o.value===prevVal))filterEl.value=prevVal;
+
+  const filtered=filterEl.value?state.log.filter(e=>e.name===filterEl.value):state.log;
+
+  if(!filtered.length){
+    el.innerHTML=`<div class="empty">${filterEl.value?'このリスナーの当選履歴はありません':'まだ当選者がいません'}</div>`;return;
+  }
+
+  let summaryHtml='';
+  if(filterEl.value){
+    const counts={};
+    filtered.forEach(e=>{const k=e.rarity.name;counts[k]=counts[k]||{count:0,color:e.rarity.color};counts[k].count++;});
+    summaryHtml=`<div style="display:flex;flex-wrap:wrap;gap:5px;margin-bottom:10px;">`+
+      Object.entries(counts).map(([n,{count,color}])=>
+        `<span style="font-family:'Zen Dots',monospace;font-size:10px;padding:3px 9px;border-radius:10px;background:${color}22;color:${color};border:1px solid ${color}44;">${esc(n)} ×${count}</span>`).join('')+
+      `</div>`;
+  }
+
+  el.innerHTML=summaryHtml+filtered.map(e=>`
+    <div class="log-item" style="border-left-color:${e.rarity.color}">
+      <span class="log-time">${e.t}</span>
+      <span style="font-family:'Zen Dots',monospace;font-size:10px;padding:2px 7px;border-radius:4px;background:${e.rarity.color}22;color:${e.rarity.color};border:1px solid ${e.rarity.color}44;">${esc(e.rarity.name)}</span>
+      <span>${esc(e.name)}</span>
+      <span>→ <span class="log-prize-name">${esc(e.prize.name)}</span></span>
+    </div>`).join('');
+}
+
+function clearLog(){state.log=[];state.winCount=0;document.getElementById('logFilter').value='';renderLog();updateStats();}
+
+function exportCSV(){
+  if(!state.log.length)return alert('ログがありません');
+  const rows=[['時刻','リスナー名','レアリティ','景品名']];
+  [...state.log].reverse().forEach(e=>{
+    rows.push([e.t,e.name,e.rarity.name,e.prize.name]);
+  });
+  const csv=rows.map(r=>r.map(v=>'"'+String(v).replace(/"/g,'""')+'"').join(',')).join('\n');
+  const blob=new Blob(['\uFEFF'+csv],{type:'text/csv;charset=utf-8;'});
+  const url=URL.createObjectURL(blob);
+  const a=document.createElement('a');
+  a.href=url;a.download='gacha-log-'+new Date().toLocaleDateString('ja-JP').replace(/\//g,'-')+'.csv';
+  document.body.appendChild(a);a.click();document.body.removeChild(a);
+  URL.revokeObjectURL(url);
+}
+
+/* ===== UI ===== */
+function switchTab(name,btn){
+  document.querySelectorAll('.tab-btn').forEach(b=>b.classList.remove('active'));
+  document.querySelectorAll('.tab-pane').forEach(p=>p.classList.remove('active'));
+  if(btn)btn.classList.add('active');
+  const pane=document.getElementById('tab-'+name);
+  if(pane)pane.classList.add('active');
+}
+
+function switchMobTab(name){
+  document.querySelectorAll('.mob-btn').forEach(b=>b.classList.remove('active'));
+  const mobBtn=document.getElementById('mobt-'+name);
+  if(mobBtn)mobBtn.classList.add('active');
+  const sidebar=document.querySelector('.sidebar');
+  const main=document.querySelector('.main');
+  if(name==='settings'){
+    sidebar.classList.add('mob-active');
+    main.classList.remove('mob-active');
+  }else{
+    sidebar.classList.remove('mob-active');
+    main.classList.add('mob-active');
+    const deskBtn=document.querySelector(`.tab-btn[data-tab="${name}"]`);
+    switchTab(name,deskBtn);
+  }
+}
+
+function updateStats(){
+  document.getElementById('statConn').textContent=Object.keys(state.connections).length;
+  document.getElementById('statReg').textContent=Object.keys(state.listeners).length;
+  document.getElementById('statR').textContent=state.rarities.length;
+  document.getElementById('statWins').textContent=state.winCount;
+}
+
+/* ===== INDEXEDDB + LOCALSTORAGE ===== */
+const LS_KEY='gacha-host-v2';
+const DB_NAME='gacha-host-db';
+const DB_STORE='files';
+let _db=null;
+
+function openDB(){
+  return new Promise((res,rej)=>{
+    const req=indexedDB.open(DB_NAME,1);
+    req.onupgradeneeded=e=>{
+      const db=e.target.result;
+      if(!db.objectStoreNames.contains(DB_STORE))db.createObjectStore(DB_STORE,{keyPath:'id'});
+    };
+    req.onsuccess=e=>{_db=e.target.result;res(_db);};
+    req.onerror=e=>rej(e);
+  });
+}
+function dbSaveFile(id,ab,name,mimeType){
+  return new Promise((res,rej)=>{const tx=_db.transaction(DB_STORE,'readwrite');
+    tx.objectStore(DB_STORE).put({id,arrayBuffer:ab,name,mimeType});tx.oncomplete=res;tx.onerror=rej;});
+}
+function dbLoadFile(id){
+  return new Promise((res,rej)=>{const tx=_db.transaction(DB_STORE,'readonly');
+    const req=tx.objectStore(DB_STORE).get(id);req.onsuccess=e=>res(e.target.result||null);req.onerror=rej;});
+}
+function dbDeleteFile(id){
+  return new Promise((res,rej)=>{const tx=_db.transaction(DB_STORE,'readwrite');
+    tx.objectStore(DB_STORE).delete(id);tx.oncomplete=res;tx.onerror=rej;});
+}
+function dbClearAll(){
+  return new Promise((res,rej)=>{const tx=_db.transaction(DB_STORE,'readwrite');
+    tx.objectStore(DB_STORE).clear();tx.oncomplete=res;tx.onerror=rej;});
+}
+
+function saveState(){
+  try{
+    const data={
+      costPerSpin:parseInt(document.getElementById('costPerSpin').value)||100,
+      bonusEvery:state.bonusEvery||null,
+      bonusFree:state.bonusFree||null,
+      pinEnabled:state.pinEnabled,
+      rarities:state.rarities.map(r=>({
+        id:r.id,name:r.name,color:r.color,rate:r.rate,
+        prizes:r.prizes.map(p=>({
+          id:p.id,name:p.name,text:p.text,
+          fileId:p.file?('f-'+p.id):null,
+          fileName:p.file?.name||null,fileMime:p.file?.mimeType||null
+        }))
+      })),
+      // peerId は保存しない（起動のたびに接続し直すため）
+      listeners:Object.fromEntries(
+        Object.entries(state.listeners).map(([k,v])=>[k,{remainingSpins:v.remainingSpins,spinsUsed:v.spinsUsed||0,pin:v.pin||null}])
+      )
+    };
+    localStorage.setItem(LS_KEY,JSON.stringify(data));
+  }catch(e){console.warn('saveState failed:',e);}
+}
+
+function initDefaultRarities(){
+  state.rarities=[
+    {id:Date.now()+1,name:'UR', color:'#FF0080',rate:1, prizes:[]},
+    {id:Date.now()+2,name:'SSR',color:'#FFD700',rate:4, prizes:[]},
+    {id:Date.now()+3,name:'SR', color:'#AA44FF',rate:10,prizes:[]},
+    {id:Date.now()+4,name:'R',  color:'#4488FF',rate:25,prizes:[]},
+    {id:Date.now()+5,name:'N',  color:'#888888',rate:60,prizes:[]},
+  ];
+  renderRarities();updateStats();
+}
+
+async function loadState(){
+  try{
+    const raw=localStorage.getItem(LS_KEY);
+    if(!raw){initDefaultRarities();return;}
+    const data=JSON.parse(raw);
+    document.getElementById('costPerSpin').value=data.costPerSpin||100;
+    state.costPerSpin=data.costPerSpin||100;
+    state.bonusEvery=data.bonusEvery||null;
+    state.bonusFree=data.bonusFree||null;
+    if(state.bonusEvery&&state.bonusFree&&state.bonusFree>=state.bonusEvery)state.bonusFree=null;
+    document.getElementById('bonusEvery').value=state.bonusEvery||'';
+    document.getElementById('bonusFree').value=state.bonusFree||'';
+    document.getElementById('bonusError').style.display='none';
+    state.pinEnabled=data.pinEnabled||false;
+    document.getElementById('pinToggleTrack').classList.toggle('on',state.pinEnabled);
+    document.getElementById('pinToggleLabel').textContent=state.pinEnabled?'オン':'オフ';
+    state.rarities=await Promise.all((data.rarities||[]).map(async r=>({
+      ...r,
+      prizes:await Promise.all(r.prizes.map(async p=>{
+        let file=null;
+        if(p.fileId){
+          const stored=await dbLoadFile(p.fileId).catch(()=>null);
+          file=stored?{name:stored.name,mimeType:stored.mimeType,arrayBuffer:stored.arrayBuffer}:null;
+        }
+        return{id:p.id,name:p.name,text:p.text,file};
+      }))
+    })));
+    state.listeners=Object.fromEntries(
+      Object.entries(data.listeners||{}).map(([k,v])=>[k,{remainingSpins:v.remainingSpins,spinsUsed:v.spinsUsed||0,pin:v.pin||null,peerId:null}])
+    );
+    renderRarities();renderListeners();updateStats();
+    if(state.rarities.length)toast('前回の設定を復元しました');
+  }catch(e){console.warn('loadState failed:',e);}
+}
+
+async function resetAll(){
+  if(!confirm('すべての設定・景品ファイル・リスナー情報をリセットしますか？'))return;
+  localStorage.removeItem(LS_KEY);
+  await dbClearAll().catch(()=>{});
+  state.rarities=[];state.listeners={};state.log=[];state.winCount=0;
+  state.bonusEvery=null;state.bonusFree=null;state.pinEnabled=false;
+  document.getElementById('costPerSpin').value=100;
+  document.getElementById('bonusEvery').value='';
+  document.getElementById('bonusFree').value='';
+  document.getElementById('bonusError').style.display='none';
+  document.getElementById('pinToggleTrack').classList.remove('on');
+  document.getElementById('pinToggleLabel').textContent='オフ';
+  renderRarities();renderListeners();renderLog();updateStats();
+  toast('リセットしました');
+}
+
+function broadcastSettingsToGuests(){
+  const bonusActive=state.bonusEvery>0&&state.bonusFree>0&&state.bonusFree<state.bonusEvery;
+  Object.values(state.connections).forEach(cd=>{
+    cd.conn.send({type:'bonus_update',
+      bonusEvery:bonusActive?state.bonusEvery:null,
+      bonusFree:bonusActive?state.bonusFree:null,
+      costPerSpin:state.costPerSpin});
+  });
+}
+
+document.getElementById('costPerSpin').addEventListener('change',function(){
+  state.costPerSpin=parseInt(this.value)||100;
+  saveState();updateSpinsPreview();broadcastSettingsToGuests();
+});
+function applyBonusSettings(){
+  const every=parseInt(document.getElementById('bonusEvery').value)||null;
+  const free=parseInt(document.getElementById('bonusFree').value)||null;
+  const errEl=document.getElementById('bonusError');
+  if(every&&free&&free>=every){
+    errEl.style.display='block';
+    // free側を無効化（入力中は表示だけして保存はしない）
+    state.bonusEvery=every;state.bonusFree=null;
+  }else{
+    errEl.style.display='none';
+    state.bonusEvery=every;state.bonusFree=free;
+  }
+  saveState();updateSpinsPreview();renderListeners();broadcastSettingsToGuests();
+}
+document.getElementById('bonusEvery').addEventListener('input',applyBonusSettings);
+document.getElementById('bonusFree').addEventListener('input',applyBonusSettings);
+
+function toast(msg){
+  const el=document.createElement('div');
+  const bottom=window.innerWidth<768?'80px':'24px';
+  el.style.cssText=`position:fixed;bottom:${bottom};left:50%;transform:translateX(-50%);background:rgba(20,0,45,0.97);border:1px solid var(--cyan);color:var(--cyan);padding:10px 20px;border-radius:20px;font-size:13px;z-index:9999;white-space:nowrap;pointer-events:none;`;
+  el.textContent=msg;document.body.appendChild(el);setTimeout(()=>el.remove(),2200);
+}
+
+updateStats();
+renderLog();
+openDB().then(()=>loadState()).catch(e=>console.error('DB open failed:',e));
+if(window.innerWidth<768){
+  document.querySelector('.sidebar').classList.add('mob-active');
+}
+</script>
+</body>
+</html>
